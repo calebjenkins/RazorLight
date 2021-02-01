@@ -1,24 +1,23 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace RazorLight.Razor
 {
-    public class EmbeddedRazorProject : RazorLightProject
-    {
-        public EmbeddedRazorProject(Type rootType)
-        {
-            if (rootType == null)
-            {
-                throw new ArgumentNullException(nameof(rootType));
-            }
+	public class EmbeddedRazorProject : RazorLightProject
+	{
+		public EmbeddedRazorProject(Type rootType)
+		{
+			if (rootType == null)
+			{
+				throw new ArgumentNullException(nameof(rootType));
+			}
 
-			this.Assembly = rootType.Assembly;
-        }
+			Assembly = rootType.Assembly;
+			RootNamespace = rootType.Namespace;
+		}
 
 		public EmbeddedRazorProject(Assembly assembly, string rootNamespace = "")
 		{
@@ -31,7 +30,7 @@ namespace RazorLight.Razor
 
 		public string RootNamespace { get; set; }
 
-		public virtual string Extension { get; set; } = ".cshtml";
+		public string Extension { get; set; } = ".cshtml";
 
 		public override Task<RazorLightProjectItem> GetItemAsync(string templateKey)
 		{
@@ -42,17 +41,32 @@ namespace RazorLight.Razor
 
 			if (!templateKey.EndsWith(Extension))
 			{
-				templateKey = templateKey + Extension;
+				templateKey += Extension;
 			}
 
-            var item = new EmbeddedRazorProjectItem(Assembly, RootNamespace, templateKey);
+			var item = new EmbeddedRazorProjectItem(Assembly, RootNamespace, templateKey);
 
-            return Task.FromResult((RazorLightProjectItem)item);
-        }
+			return Task.FromResult((RazorLightProjectItem)item);
+		}
 
-        public override Task<IEnumerable<RazorLightProjectItem>> GetImportsAsync(string templateKey)
-        {
-            return Task.FromResult(Enumerable.Empty<RazorLightProjectItem>());
-        }
-    }
+		public override Task<IEnumerable<RazorLightProjectItem>> GetImportsAsync(string templateKey)
+		{
+			return Task.FromResult(Enumerable.Empty<RazorLightProjectItem>());
+		}
+
+		public override Task<IEnumerable<string>> GetKnownKeysAsync()
+		{
+			var ignoredPrefix = string.IsNullOrEmpty(RootNamespace) ? Assembly.GetName().FullName : RootNamespace;
+			if (!ignoredPrefix.EndsWith(".")) ignoredPrefix += ".";
+
+			var fullResourceNames = this.Assembly.GetManifestResourceNames()
+				.Where(x => x.StartsWith(ignoredPrefix) && x.EndsWith(Extension));
+
+			var keys = fullResourceNames
+				.Select(x => x.Remove(0, ignoredPrefix.Length)) // Remove prefix
+				.Select(x => x.Remove(x.Length - Extension.Length, Extension.Length)); // Remove extension
+
+			return Task.FromResult(keys);
+		}
+	}
 }

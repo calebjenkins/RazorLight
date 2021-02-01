@@ -1,13 +1,13 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
-namespace Samples.EntityFrameworkProject
+namespace Samples.EntityFrameworkProject.EntityFramework
 {
-    public class AppDbContext : DbContext
-    {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
-        {
-        }
+	public class AppDbContext : DbContext
+	{
+		public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+		{
+		}
 
-        public DbSet<TemplateEntity> Templates { get; set; }
-    }
+		public DbSet<TemplateEntity> Templates { get; set; }
+	}
 }

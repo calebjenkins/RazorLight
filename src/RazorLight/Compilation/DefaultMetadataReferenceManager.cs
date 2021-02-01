@@ -1,118 +1,117 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
 using Microsoft.CodeAnalysis;
 using System.Reflection;
 using Microsoft.Extensions.DependencyModel;
 using System.Linq;
 using System.IO;
 using System.Reflection.PortableExecutable;
+using Microsoft.Extensions.Options;
 
 namespace RazorLight.Compilation
 {
-    public class DefaultMetadataReferenceManager : IMetadataReferenceManager
-    {
-        public HashSet<MetadataReference> AdditionalMetadataReferences { get; }
-        public HashSet<string> ExcludedAssemblies { get; }
+	public class DefaultMetadataReferenceManager : IMetadataReferenceManager
+	{
+		private readonly IAssemblyDirectoryFormatter _directoryFormatter = new DefaultAssemblyDirectoryFormatter();
+		public HashSet<MetadataReference> AdditionalMetadataReferences { get; }
+		public HashSet<string> ExcludedAssemblies { get; }
 
-        public DefaultMetadataReferenceManager()
-        {
-            AdditionalMetadataReferences = new HashSet<MetadataReference>();
-            ExcludedAssemblies = new HashSet<string>();
-        }
+		public DefaultMetadataReferenceManager()
+		{
+			AdditionalMetadataReferences = new HashSet<MetadataReference>();
+			ExcludedAssemblies = new HashSet<string>();
+		}
 
-        public DefaultMetadataReferenceManager(HashSet<MetadataReference> metadataReferences)
-        {
-            AdditionalMetadataReferences = metadataReferences ?? throw new ArgumentNullException(nameof(metadataReferences));
-            ExcludedAssemblies = new HashSet<string>();
-        }
+		public DefaultMetadataReferenceManager(IOptions<RazorLightOptions> options, IAssemblyDirectoryFormatter directoryFormatter) : this(options.Value.AdditionalMetadataReferences, options.Value.ExcludedAssemblies)
+		{
+			_directoryFormatter = directoryFormatter;
+		}
 
-        public DefaultMetadataReferenceManager(HashSet<MetadataReference> metadataReferences, HashSet<string> excludedAssemblies)
-        {
-            AdditionalMetadataReferences = metadataReferences ?? throw new ArgumentNullException(nameof(metadataReferences));
-            ExcludedAssemblies = excludedAssemblies ?? throw new ArgumentNullException(nameof(excludedAssemblies));
-        }
+		public DefaultMetadataReferenceManager(HashSet<MetadataReference> metadataReferences)
+		{
+			AdditionalMetadataReferences = metadataReferences ?? throw new ArgumentNullException(nameof(metadataReferences));
+			ExcludedAssemblies = new HashSet<string>();
+		}
 
-        public IReadOnlyList<MetadataReference> Resolve(Assembly assembly)
-        {
-            var dependencyContext = DependencyContext.Load(assembly);
+		public DefaultMetadataReferenceManager(HashSet<MetadataReference> metadataReferences, HashSet<string> excludedAssemblies)
+		{
+			AdditionalMetadataReferences = metadataReferences ?? throw new ArgumentNullException(nameof(metadataReferences));
+			ExcludedAssemblies = excludedAssemblies ?? throw new ArgumentNullException(nameof(excludedAssemblies));
+		}
 
-            return Resolve(assembly, dependencyContext);
-        }
+		public IReadOnlyList<MetadataReference> Resolve(Assembly assembly)
+		{
+			var dependencyContext = DependencyContext.Load(assembly);
 
-        internal IReadOnlyList<MetadataReference> Resolve(Assembly assembly, DependencyContext dependencyContext)
-        {
-            var libraryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            IEnumerable<string> references = null;
-            if (dependencyContext == null)
-            {
-                var context = new HashSet<string>();
-                var x = GetReferencedAssemblies(assembly, ExcludedAssemblies, context).Union(new Assembly[] { assembly }).ToArray();
-                references = x.Select(p => AssemblyDirectory(p));
-            }
-            else
-            {
-                references = dependencyContext.CompileLibraries.SelectMany(library => library.ResolveReferencePaths());
+			return Resolve(assembly, dependencyContext);
+		}
 
-                if (!references.Any())
-                {
-                    throw new RazorLightException("Can't load metadata reference from the entry assembly. " +
-                                                  "Make sure PreserveCompilationContext is set to true in *.csproj file");
-                }
-            }
+		internal IReadOnlyList<MetadataReference> Resolve(Assembly assembly, DependencyContext dependencyContext)
+		{
+			var libraryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			IEnumerable<string> references;
+			if (dependencyContext == null)
+			{
+				var context = new HashSet<string>();
+				var x = GetReferencedAssemblies(assembly, ExcludedAssemblies, context).Union(new[] { assembly }).ToArray();
+				references = x.Select(p => _directoryFormatter.GetAssemblyDirectory(p)).ToList();
+			}
+			else
+			{
+				references = dependencyContext.CompileLibraries.Where(x => !ExcludedAssemblies.Contains(x.Name)).SelectMany(library => library.ResolveReferencePaths()).ToList();
 
-            var metadataRerefences = new List<MetadataReference>();
+				if (!references.Any())
+				{
+					throw new RazorLightException("Can't load metadata reference from the entry assembly. " +
+												  "Make sure PreserveCompilationContext is set to true in *.csproj file");
+				}
+			}
 
-            foreach (var reference in references)
-            {
-                if (libraryPaths.Add(reference))
-                {
-                    using (var stream = File.OpenRead(reference))
-                    {
-                        var moduleMetadata = ModuleMetadata.CreateFromStream(stream, PEStreamOptions.PrefetchMetadata);
-                        var assemblyMetadata = AssemblyMetadata.Create(moduleMetadata);
+			var metadataReferences = new List<MetadataReference>();
 
-                        metadataRerefences.Add(assemblyMetadata.GetReference(filePath: reference));
-                    }
-                }
-            }
+			foreach (var reference in references)
+			{
+				if (!libraryPaths.Add(reference)) continue;
 
-            if (AdditionalMetadataReferences.Any())
-            {
-                metadataRerefences.AddRange(AdditionalMetadataReferences);
-            }
+				using (var stream = File.OpenRead(reference))
+				{
+					var moduleMetadata = ModuleMetadata.CreateFromStream(stream, PEStreamOptions.PrefetchMetadata);
+					var assemblyMetadata = AssemblyMetadata.Create(moduleMetadata);
 
-            return metadataRerefences;
-        }
+					metadataReferences.Add(assemblyMetadata.GetReference(filePath: reference));
+				}
+			}
 
-        private static IEnumerable<Assembly> GetReferencedAssemblies(Assembly a, IEnumerable<string> excludedAssemblies, HashSet<string> visitedAssemblies = null)
-        {
-            visitedAssemblies = visitedAssemblies ?? new HashSet<string>();
-            if (!visitedAssemblies.Add(a.GetName().EscapedCodeBase))
-            {
-                yield break;
-            }
+			if (AdditionalMetadataReferences.Any())
+			{
+				metadataReferences.AddRange(AdditionalMetadataReferences);
+			}
 
-            foreach (var assemblyRef in a.GetReferencedAssemblies())
-            {
-                if (visitedAssemblies.Contains(assemblyRef.EscapedCodeBase)) { continue; }
+			return metadataReferences;
+		}
 
-                if (excludedAssemblies.Any(s => s.Contains(assemblyRef.Name))) { continue; }
-                var loadedAssembly = Assembly.Load(assemblyRef);
-                yield return loadedAssembly;
-                foreach (var referenced in GetReferencedAssemblies(loadedAssembly, excludedAssemblies, visitedAssemblies))
-                {
-                    yield return referenced;
-                }
+		private static IEnumerable<Assembly> GetReferencedAssemblies(Assembly a, ISet<string> excludedAssemblies, HashSet<string> visitedAssemblies = null)
+		{
+			visitedAssemblies = visitedAssemblies ?? new HashSet<string>();
+			if (!visitedAssemblies.Add(a.GetName().EscapedCodeBase))
+			{
+				yield break;
+			}
 
-            }
-        }
+			foreach (var assemblyRef in a.GetReferencedAssemblies())
+			{
+				if (visitedAssemblies.Contains(assemblyRef.EscapedCodeBase)) { continue; }
 
-        private static string AssemblyDirectory(Assembly assembly)
-        {
-            string codeBase = assembly.CodeBase;
-            UriBuilder uri = new UriBuilder(codeBase);
-            return Uri.UnescapeDataString(uri.Path);
-        }
-    }
+				if (excludedAssemblies.Any(s => s.Contains(assemblyRef.Name))) { continue; }
+				var loadedAssembly = Assembly.Load(assemblyRef);
+				yield return loadedAssembly;
+				foreach (var referenced in GetReferencedAssemblies(loadedAssembly, excludedAssemblies, visitedAssemblies))
+				{
+					yield return referenced;
+				}
+			}
+		}
+
+	
+	}
 }

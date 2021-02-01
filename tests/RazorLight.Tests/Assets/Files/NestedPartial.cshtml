@@ -1,0 +1,7 @@
+@model RazorLight.Tests.Integration.TestViewModel
+
+This is a nested partial which attempts to render Partial.cshtml
+
+@{
+	await IncludeAsync("Partial", Model);
+}

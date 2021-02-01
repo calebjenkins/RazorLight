@@ -1,0 +1,4 @@
+{
+  Type: InvalidOperationException,
+  Message: Section header is not defined
+}

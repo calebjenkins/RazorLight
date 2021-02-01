@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
@@ -10,21 +11,22 @@ using Xunit;
 namespace RazorLight.Tests.Compilation
 {
 	public class RazorTemplateCompilerTest
-    {
+	{
 		[Fact]
 		public void Ensure_Throws_OnNull_Constructor_Dependencies()
 		{
 			var options = new RazorLightOptions();
-			var metatadaManager = new DefaultMetadataReferenceManager();
+			var metadataManager = new DefaultMetadataReferenceManager();
 			var assembly = Assembly.GetCallingAssembly();
 			var project = new EmbeddedRazorProject(assembly);
-			var compilerService = new RoslynCompilationService(metatadaManager, assembly);
+			var compilerService = new RoslynCompilationService(metadataManager, assembly);
 			var generator = new RazorSourceGenerator(DefaultRazorEngine.Instance, project);
 
 			Action p1 = new Action(() => { new RazorTemplateCompiler(null, compilerService, project, options); });
 			Action p2 = new Action(() => { new RazorTemplateCompiler(generator, null, project, options); });
 			Action p3 = new Action(() => { new RazorTemplateCompiler(generator, compilerService, null, options); });
-			Action p4 = new Action(() => { new RazorTemplateCompiler(generator, compilerService, project, null); });
+			
+			Action p4 = new Action(() => { new RazorTemplateCompiler(generator, compilerService, project, null as RazorLightOptions); });
 
 			Assert.Throws<ArgumentNullException>(p1);
 			Assert.Throws<ArgumentNullException>(p2);
@@ -118,7 +120,7 @@ namespace RazorLight.Tests.Compilation
 		public void Throws_TemplateNotFoundException_If_ProjectItem_NotExist()
 		{
 			var project = new EmbeddedRazorProject(typeof(Root).Assembly);
-			var compiler = TestRazorTemplateCompiler.Create(project:project);
+			var compiler = TestRazorTemplateCompiler.Create(project: project);
 
 			Func<Task> task = new Func<Task>(() => compiler.CompileAsync("Not.Existing.Key"));
 
@@ -126,10 +128,55 @@ namespace RazorLight.Tests.Compilation
 		}
 
 		[Fact]
+		public async Task Ensure_TemplateNotFoundException_KnownKeys_NotNull_When_EnableDebugMode_True()
+		{
+			var options = new RazorLightOptions { EnableDebugMode = true };
+			var project = new EmbeddedRazorProject(typeof(Root));
+			var compiler = TestRazorTemplateCompiler.Create(options, project);
+			var item = new EmbeddedRazorProjectItem(typeof(Root), "Any.Key");
+
+			var exception = await compiler.CreateTemplateNotFoundException(item);
+			
+			Assert.NotNull(exception.KnownDynamicTemplateKeys);
+			Assert.NotNull(exception.KnownProjectTemplateKeys);
+		}
+
+		[Fact]
+		public async Task Ensure_TemplateNotFoundException_KnownKeys_Null_When_EnableDebugMode_False()
+		{
+			var options = new RazorLightOptions { EnableDebugMode = false };
+			var project = new EmbeddedRazorProject(typeof(Root));
+			var compiler = TestRazorTemplateCompiler.Create(options, project);
+			var item = new EmbeddedRazorProjectItem(typeof(Root), "Any.Key");
+
+			var exception = await compiler.CreateTemplateNotFoundException(item);
+
+			Assert.Null(exception.KnownDynamicTemplateKeys);
+			Assert.Null(exception.KnownProjectTemplateKeys);
+		}
+
+		[Fact]
+		public async Task Ensure_TemplateNotFoundException_KnownDynamicTemplateKeys_Exist_When_EnableDebugMode_True()
+		{
+			var dynamicTemplateKeys = new[] { "dynamicKey1", "dynamicKey2" };
+
+			var project = new EmbeddedRazorProject(typeof(Root).Assembly, "RazorLight.Tests.Assets.Embedded");
+			var options = new RazorLightOptions { EnableDebugMode = true };
+			foreach (var dynamicKey in dynamicTemplateKeys) options.DynamicTemplates.Add(dynamicKey, "Content");
+			var compiler = TestRazorTemplateCompiler.Create(options, project);
+			var item = new EmbeddedRazorProjectItem(typeof(Root), "Any.Key");
+
+			var exception = await compiler.CreateTemplateNotFoundException(item);
+
+			Assert.NotNull(exception.KnownDynamicTemplateKeys);
+			Assert.Equal(dynamicTemplateKeys.OrderBy(x => x), exception.KnownDynamicTemplateKeys.OrderBy(x => x));
+		}
+
+		[Fact]
 		public async Task Ensure_TemplateIsCompiled_ForExisting_ProjectItem()
 		{
-			var project = new EmbeddedRazorProject(typeof(Root).Assembly, "Assets.Embedded");
-			var compiler = TestRazorTemplateCompiler.Create(project:project);
+			var project = new EmbeddedRazorProject(typeof(Root).Assembly, "RazorLight.Tests.Assets.Embedded");
+			var compiler = TestRazorTemplateCompiler.Create(project: project);
 
 			string templateKey = "Empty.cshtml";
 			var result = await compiler.CompileAsync(templateKey);
@@ -145,9 +192,9 @@ namespace RazorLight.Tests.Compilation
 		public class TestRazorTemplateCompiler : RazorTemplateCompiler
 		{
 			public TestRazorTemplateCompiler(
-				RazorSourceGenerator sourceGenerator, 
-				RoslynCompilationService roslynCompilationService, 
-				RazorLightProject razorLightProject, 
+				RazorSourceGenerator sourceGenerator,
+				RoslynCompilationService roslynCompilationService,
+				RazorLightProject razorLightProject,
 				RazorLightOptions razorLightOptions) : base(sourceGenerator, roslynCompilationService, razorLightProject, razorLightOptions)
 			{
 			}
@@ -155,10 +202,10 @@ namespace RazorLight.Tests.Compilation
 			public static TestRazorTemplateCompiler Create(RazorLightOptions options = null, RazorLightProject project = null)
 			{
 				var razorOptions = options ?? new RazorLightOptions();
-				var metatadaManager = new DefaultMetadataReferenceManager();
+				var metadataManager = new DefaultMetadataReferenceManager();
 				var assembly = Assembly.GetCallingAssembly();
 				var razorProject = project ?? new EmbeddedRazorProject(assembly);
-				var compilerService = new RoslynCompilationService(metatadaManager, assembly);
+				var compilerService = new RoslynCompilationService(metadataManager, assembly);
 				var generator = new RazorSourceGenerator(DefaultRazorEngine.Instance, razorProject);
 
 				return new TestRazorTemplateCompiler(generator, compilerService, razorProject, razorOptions);

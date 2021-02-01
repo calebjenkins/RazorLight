@@ -1,20 +1,20 @@
-﻿using RazorLight.Compilation;
-using RazorLight.Razor;
-using System;
+﻿using System;
 using System.Threading.Tasks;
+using RazorLight.Compilation;
+using RazorLight.Razor;
 using Xunit;
 
-namespace RazorLight.Tests
+namespace RazorLight.Tests.Compilation
 {
 	public class TemplateFactoryProviderTest
-    {
+	{
 		[Fact]
 		public void Ensure_FactoryReturnsValidTemplateType()
 		{
 			string templateKey = "testKey";
 
 			var templateFactoryProvider = new TemplateFactoryProvider();
-			var descriptor = new CompiledTemplateDescriptor()
+			var descriptor = new CompiledTemplateDescriptor
 			{
 				TemplateAttribute = new RazorLightTemplateAttribute(templateKey, typeof(TestFactoryClass)),
 				TemplateKey = templateKey

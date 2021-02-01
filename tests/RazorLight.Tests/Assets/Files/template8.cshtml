@@ -1,0 +1,15 @@
+@model RazorLight.Tests.Integration.TestViewModel
+@{
+	Layout = "LayoutWithRequiredSection.cshtml";
+}
+
+@section header {
+	Header of a @Model.Name page
+}
+
+@section message {
+	await IncludeAsync("NestedPartial", Model);
+}
+
+
+We are rendering this with @Model.Name

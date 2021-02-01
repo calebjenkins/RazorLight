@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace RazorLight.Tests
+﻿namespace RazorLight.Tests
 {
-    public class Root
-    {
-    }
+	public class Root
+	{
+	}
 }

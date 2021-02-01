@@ -1,32 +1,27 @@
 ﻿using Microsoft.CodeAnalysis;
-using Microsoft.Extensions.DependencyModel;
 using RazorLight.Compilation;
 using System;
 using System.Collections.Generic;
 using Xunit;
-using Pose;
 
 namespace RazorLight.Tests.Compilation
 {
-    public class DefaultMetadataReferenceManagerTest
-    {
-        [Fact]
-        public void Throws_OnEmptyManager_InConstructor()
-        {
-            Assert.Throws<ArgumentNullException>(() => { new DefaultMetadataReferenceManager(null, null); });
-        }
+	public class DefaultMetadataReferenceManagerTest
+	{
+		[Fact]
+		public void Throws_OnEmptyManager_InConstructor()
+		{
+			Assert.Throws<ArgumentNullException>(() => { _ = new DefaultMetadataReferenceManager(null as HashSet<MetadataReference>, null); });
+		}
 
-        [Fact]
-        public void Ensure_AdditionalMetadata_IsApplied()
-        {
-            var metadata = new HashSet<MetadataReference>();
+		[Fact]
+		public void Ensure_AdditionalMetadata_IsApplied()
+		{
+			var metadata = new HashSet<MetadataReference>();
+			var manager = new DefaultMetadataReferenceManager(metadata);
 
-            var manager = new DefaultMetadataReferenceManager(metadata);
-
-            Assert.NotNull(manager.AdditionalMetadataReferences);
-            Assert.Equal(metadata, manager.AdditionalMetadataReferences);
-        }
-
-        
+			Assert.NotNull(manager.AdditionalMetadataReferences);
+			Assert.Equal(metadata, manager.AdditionalMetadataReferences);
+		}
 	}
 }

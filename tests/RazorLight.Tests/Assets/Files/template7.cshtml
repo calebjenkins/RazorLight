@@ -1,0 +1,7 @@
+@model RazorLight.Tests.Integration.TestViewModel
+
+We are rendering this with @Model.Name
+
+@{
+	await IncludeAsync("Partial", Model);
+}

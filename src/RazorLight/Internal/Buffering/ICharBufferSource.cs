@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace RazorLight.Internal
+﻿namespace RazorLight.Internal.Buffering
 {
-    public interface ICharBufferSource
-    {
-        char[] Rent(int bufferSize);
+	public interface ICharBufferSource
+	{
+		char[] Rent(int bufferSize);
 
-        void Return(char[] buffer);
-    }
+		void Return(char[] buffer);
+	}
 }
